@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>השמירונית — לוח שמירות מחנה</title>
+<meta name="description" content="השמירונית: מי שומר עכשיו, איפה ומתי. חיפוש לפי שם, עמדה וצוות, לוח שמירות יומי, המשמרות שלי, החלפות וסטטיסטיקת עומס — מתוך גיליון השמירות.">
+<meta name="theme-color" content="#26301c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='46' fill='%2333421f' stroke='%23d4a02c' stroke-width='6'/%3E%3Cpath d='M50 18 L76 30 V52 C76 68 64 78 50 84 C36 78 24 68 24 52 V30 Z' fill='none' stroke='%23d4a02c' stroke-width='6'/%3E%3Ccircle cx='50' cy='50' r='7' fill='%23efe7d0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script>
+  // ערכת נושא — לפני הצביעה כדי למנוע הבהוב
+  (function(){try{var t=localStorage.getItem('theme');if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+</head>
+<body>
+
+<!-- ============ HEADER ============ -->
+<header class="site-header">
+  <div class="nav-wrap">
+    <div class="brand"><span class="logo">🛡</span><span>השמירונית</span></div>
+    <nav class="nav-links">
+      <a href="#now">עכשיו</a>
+      <a href="#mine">המשמרות שלי</a>
+      <a href="#board">לוח שמירות</a>
+      <a href="#search">חיפוש</a>
+      <a href="#swap">החלפות</a>
+      <a href="#soldiers">חיילים ועומס</a>
+      <a href="#rules">נהלים</a>
+    </nav>
+    <button class="icon-btn" id="settingsBtn" aria-label="הגדרות" title="הגדרות">⚙️</button>
+    <button class="icon-btn theme-toggle" id="themeToggle" aria-label="החלפת מצב תצוגה" title="מצב יום / לילה">🌙</button>
+  </div>
+</header>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="hero-inner">
+    <p class="tagline">◆ ה־ש־מ־י־ר־ו־נ־י־ת ◆</p>
+    <h1>לוח שמירות — <span id="campName">מחנה</span></h1>
+    <p class="sub">מי שומר עכשיו, איפה ומתי. חיפוש לפי שם, עמדה וצוות, המשמרות האישיות שלך, החלפות בין חיילים ומעקב אחרי חלוקת העומס — הכול ישירות מגיליון השמירות.</p>
+    <div class="hero-search">
+      <input type="search" id="heroName" list="namesList" placeholder="הקלידו את השם שלכם…" autocomplete="off" aria-label="שם חייל">
+      <button class="btn" id="heroGo">המשמרות שלי ←</button>
+    </div>
+    <div class="data-status" id="dataStatus">
+      <span class="dot"></span><span id="dataStatusText">טוען נתונים…</span>
+      <button class="link-btn" id="refreshBtn" title="רענון מהגיליון">⟳ רענון</button>
+      <a class="link-btn" id="sheetLink" target="_blank" rel="noopener">📄 פתיחת הגיליון</a>
+    </div>
+  </div>
+</section>
+
+<main>
+
+  <!-- ============ NOW ============ -->
+  <section id="now" class="section">
+    <div class="section-head">
+      <span class="kicker">01</span>
+      <h2>מה קורה עכשיו</h2>
+    </div>
+    <div class="clock-bar card">
+      <div class="clock">
+        <div class="clock-time" id="clockTime">--:--</div>
+        <div class="clock-day" id="clockDay"></div>
+      </div>
+      <div class="sim">
+        <label>הצגה לפי זמן:
+          <select id="simDay"></select>
+          <input type="time" id="simTime" step="1800">
+        </label>
+        <button class="btn small ghost-dark" id="simReset">⏱ זמן אמת</button>
+      </div>
+    </div>
+    <div class="camp-banner" id="campBanner" hidden></div>
+
+    <h3 class="sub-h">על העמדות כרגע</h3>
+    <div class="post-grid" id="nowGrid"></div>
+
+    <h3 class="sub-h">המשמרת הבאה <span class="muted" id="nextIn"></span></h3>
+    <div class="post-grid" id="nextGrid"></div>
+
+    <h3 class="sub-h">בשלוש השעות הקרובות</h3>
+    <div class="timeline" id="upcoming"></div>
+  </section>
+
+  <!-- ============ MINE ============ -->
+  <section id="mine" class="section">
+    <div class="section-head">
+      <span class="kicker">02</span>
+      <h2>המשמרות שלי</h2>
+    </div>
+    <div class="card mine-pick">
+      <label for="mineName">שם:</label>
+      <input type="search" id="mineName" list="namesList" placeholder="בחרו או הקלידו שם" autocomplete="off">
+      <label class="check"><input type="checkbox" id="rememberMe" checked> לזכור אותי במכשיר הזה</label>
+    </div>
+    <div id="mineBody" class="mine-body">
+      <p class="empty">בחרו שם כדי לראות את כל המשמרות, ספירה לאחור למשמרת הבאה, וייצוא ליומן.</p>
+    </div>
+  </section>
+
+  <!-- ============ BOARD ============ -->
+  <section id="board" class="section">
+    <div class="section-head">
+      <span class="kicker">03</span>
+      <h2>לוח שמירות יומי</h2>
+    </div>
+    <div class="toolbar">
+      <div class="tabs" id="dayTabs" role="tablist"></div>
+      <div class="toolbar-end">
+        <label class="inline">הדגשת חייל:
+          <input type="search" id="boardHighlight" list="namesList" placeholder="שם…" autocomplete="off">
+        </label>
+        <label class="inline">צוות:
+          <select id="boardTeam"><option value="">כולם</option></select>
+        </label>
+        <button class="btn small ghost-dark" id="printBtn">🖨 הדפסה</button>
+      </div>
+    </div>
+    <div class="legend" id="teamLegend"></div>
+    <div class="table-wrap">
+      <table class="board" id="boardTable"></table>
+    </div>
+    <p class="hint">לחיצה על שם פותחת את פרטי המשמרת ואפשרויות החלפה.</p>
+  </section>
+
+  <!-- ============ SEARCH ============ -->
+  <section id="search" class="section">
+    <div class="section-head">
+      <span class="kicker">04</span>
+      <h2>חיפוש וסינון</h2>
+    </div>
+    <div class="card filters">
+      <input type="search" id="q" class="q" placeholder="חיפוש חופשי: שם, עמדה, צוות, פעילות… (למשל: ״פטרול צוות 3״)" autocomplete="off">
+      <div class="filter-row">
+        <label>יום <select id="fDay"><option value="">הכול</option></select></label>
+        <label>צוות <select id="fTeam"><option value="">הכול</option></select></label>
+        <label>עמדה <select id="fPost"><option value="">הכול</option></select></label>
+        <label>סוג <select id="fType"><option value="">הכול</option></select></label>
+        <label>משעה <input type="time" id="fFrom"></label>
+        <label>עד שעה <input type="time" id="fTo"></label>
+        <label class="check"><input type="checkbox" id="fFuture"> רק משמרות עתידיות</label>
+        <button class="btn small ghost-dark" id="fClear">ניקוי</button>
+      </div>
+    </div>
+    <div class="result-bar">
+      <span id="resultCount"></span>
+      <button class="btn small ghost-dark" id="exportCsv">⬇ ייצוא ל-CSV</button>
+    </div>
+    <div class="table-wrap">
+      <table class="results" id="resultsTable">
+        <thead><tr>
+          <th data-sort="t">יום ושעה</th><th data-sort="post">עמדה</th><th data-sort="name">שומר</th>
+          <th data-sort="team">צוות</th><th data-sort="type">סוג</th><th data-sort="activity">פעילות הצוות</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ SWAP ============ -->
+  <section id="swap" class="section">
+    <div class="section-head">
+      <span class="kicker">05</span>
+      <h2>החלפת משמרות</h2>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="seg" id="swapMode">
+          <button data-mode="swap" class="active">🔁 החלפה בין שני חיילים</button>
+          <button data-mode="cover">🙋 מישהו מחליף אותי</button>
+        </div>
+        <div class="swap-form">
+          <label>חייל א׳ <input type="search" id="swA" list="namesList" placeholder="שם" autocomplete="off"></label>
+          <label>המשמרת שלו <select id="swAShift"></select></label>
+          <label>חייל ב׳ <input type="search" id="swB" list="namesList" placeholder="שם" autocomplete="off"></label>
+          <label id="swBShiftWrap">המשמרת שלו <select id="swBShift"></select></label>
+        </div>
+        <div id="swapCheck" class="checks"></div>
+        <div id="swapSuggest"></div>
+        <button class="btn" id="swapApply" disabled>ביצוע ההחלפה</button>
+      </div>
+      <div class="card">
+        <h3 class="card-h">שינויים <span class="pill" id="changesCount">0</span></h3>
+        <p class="muted small" id="syncMode"></p>
+        <ul class="changes" id="changesList"></ul>
+        <div class="row-btns">
+          <button class="btn small" id="syncBtn" hidden>⬆ סנכרון לגיליון</button>
+          <button class="btn small ghost-dark" id="shareChanges">📤 שיתוף בוואטסאפ</button>
+          <button class="btn small ghost-dark danger" id="clearChanges">ביטול כל השינויים המקומיים</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SOLDIERS ============ -->
+  <section id="soldiers" class="section">
+    <div class="section-head">
+      <span class="kicker">06</span>
+      <h2>חיילים וחלוקת עומס</h2>
+    </div>
+    <div class="team-cards" id="teamCards"></div>
+    <div class="toolbar">
+      <input type="search" id="solQ" placeholder="סינון לפי שם…" autocomplete="off">
+      <label class="inline">צוות <select id="solTeam"><option value="">כולם</option></select></label>
+      <label class="check"><input type="checkbox" id="solAnomaly"> רק חריגים בעומס</label>
+    </div>
+    <div class="table-wrap">
+      <table class="results" id="solTable">
+        <thead><tr>
+          <th data-sort="name">שם</th><th data-sort="team">צוות</th><th data-sort="sleeps">ישן בשטח</th>
+          <th data-sort="count">משמרות</th><th data-sort="hours">שעות</th><th data-sort="night">שעות לילה</th>
+          <th data-sort="day">שעות יום</th><th data-sort="sg">ש״ג</th><th data-sort="next">משמרת הבאה</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ RULES ============ -->
+  <section id="rules" class="section">
+    <div class="section-head">
+      <span class="kicker">07</span>
+      <h2>נהלי השמירה</h2>
+    </div>
+    <div class="grid-3">
+      <div class="card rule"><div class="rule-ico">🌙</div><h3>לילה (23:00–06:00)</h3><p>2 שומרים בפריקאסט + 2 שומרים בפטרול, משמרות של שעה. משובצים רק מי שישנים בשטח.</p></div>
+      <div class="card rule"><div class="rule-ico">☀️</div><h3>יום</h3><p>2 שומרים בפריקאסט, החלפה כל חצי שעה — בכל זמן שאינו שינה.</p></div>
+      <div class="card rule"><div class="rule-ico">🎯</div><h3>בזמן מטווחים</h3><p>2 שומרים נוספים בש״ג, החלפה כל חצי שעה (בנוסף לפריקאסט).</p></div>
+      <div class="card rule"><div class="rule-ico">👥</div><h3>זוגות</h3><p>שני השומרים באותה עמדה ובאותה משמרת הם תמיד מאותו צוות — האתר מתריע אם החלפה שוברת את הכלל.</p></div>
+      <div class="card rule"><div class="rule-ico">🔁</div><h3>החלפות</h3><p>החלפה נבדקת אוטומטית: חפיפה, משמרות צמודות, לילה למי שלא ישן בשטח וזוג מצוותים שונים. כל החלפה מתועדת.</p></div>
+      <div class="card rule"><div class="rule-ico">⚖️</div><h3>חלוקה שווה</h3><p>בלשונית "חיילים ועומס" רואים שעות לכל חייל ולכל צוות, ומסמנים חריגים מהממוצע.</p></div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <p>השמירונית · הנתונים נמשכים מגיליון <a id="footSheet" target="_blank" rel="noopener">טבלת השמירות</a> · הגיליון הוא מקור האמת</p>
+</footer>
+
+<datalist id="namesList"></datalist>
+
+<!-- ============ SHIFT MODAL ============ -->
+<dialog id="shiftModal" class="modal">
+  <form method="dialog" class="modal-close-form"><button class="modal-x" aria-label="סגירה">✕</button></form>
+  <div id="shiftModalBody"></div>
+</dialog>
+
+<!-- ============ SETTINGS MODAL ============ -->
+<dialog id="settingsModal" class="modal">
+  <form method="dialog" class="modal-close-form"><button class="modal-x" aria-label="סגירה">✕</button></form>
+  <h3>⚙️ הגדרות</h3>
+  <label class="block">תאריך יום ראשון של המחנה <small class="muted">(לייצוא ליומן)</small>
+    <input type="date" id="setStart">
+  </label>
+  <label class="block">כתובת Apps Script לסנכרון החלפות <small class="muted">(אופציונלי — ראו README)</small>
+    <input type="url" id="setScript" placeholder="https://script.google.com/macros/s/…/exec" dir="ltr">
+  </label>
+  <label class="block">השם שלי <small class="muted">(לשיוך ההחלפות ביומן)</small>
+    <input type="text" id="setBy" list="namesList">
+  </label>
+  <label class="check"><input type="checkbox" id="setAuto" checked> רענון אוטומטי מהגיליון כל 2 דקות</label>
+  <div class="row-btns"><button class="btn" id="setSave">שמירה</button></div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
