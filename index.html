@@ -11,6 +11,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <script>
   // ערכת נושא — לפני הצביעה כדי למנוע הבהוב
   (function(){try{var t=localStorage.getItem('theme');if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
@@ -97,6 +100,16 @@
       <label for="mineName">שם:</label>
       <input type="search" id="mineName" list="namesList" placeholder="בחרו או הקלידו שם" autocomplete="off">
       <label class="check"><input type="checkbox" id="rememberMe" checked> לזכור אותי במכשיר הזה</label>
+      <div class="notify-row">
+        <label for="notifyMode">🔔 התראה 5 דק׳ לפני משמרת:</label>
+        <select id="notifyMode">
+          <option value="">כבוי</option>
+          <option value="mine">המשמרות שלי</option>
+          <option value="all">כל המשמרות (למפקד/ת)</option>
+        </select>
+        <button class="btn small ghost-dark" id="notifyTest" type="button">בדיקה</button>
+        <span class="muted small" id="notifyHint"></span>
+      </div>
     </div>
     <div id="mineBody" class="mine-body">
       <p class="empty">בחרו שם כדי לראות את כל המשמרות, ספירה לאחור למשמרת הבאה, וייצוא ליומן.</p>

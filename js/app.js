@@ -51,7 +51,7 @@ const S = {
   byId: new Map(),
   soldiers: new Map(), // name -> { name, team, sleepsInField }
   changes: LS.get('changes', []),
-  settings: Object.assign({ start: '', script: C.APPS_SCRIPT_URL || '', by: '', auto: true }, LS.get('settings', {})),
+  settings: Object.assign({ start: '', script: C.APPS_SCRIPT_URL || '', by: '', auto: true, notify: '' }, LS.get('settings', {})),
   sim: null,           // זמן מדומה בדקות מתחילת המחנה (או null)
   boardDay: null,
   sort: { search: { key: 't', dir: 1 }, sol: { key: 'team', dir: 1 } },
@@ -540,6 +540,61 @@ function avgHours() {
 }
 function personalLink(name) { return location.origin + location.pathname + '?name=' + encodeURIComponent(name) + '#mine'; }
 
+/* ---------- התראה 5 דקות לפני משמרת ---------- */
+const NOTIFY_MIN = 5;
+// מי יוצא מהעמדה כשהמשמרת מתחילה (השומרים שמסיימים בדיוק אז באותה עמדה)
+const outgoing = r => S.rows.filter(x => x.base === r.base && x.endMin === r.startMin && x.name);
+function shiftAlert(r) {
+  const inn = S.rows.filter(x => x.base === r.base && x.startMin === r.startMin && x.name).map(x => x.name);
+  const out = outgoing(r).map(x => x.name);
+  return {
+    title: `🛡 בעוד ${NOTIFY_MIN} דק׳: ${r.base} ${r.from}–${r.to}`,
+    body: `נכנסים: ${inn.join(', ') || '—'}\n` + (out.length ? `מחליפים את: ${out.join(', ')}` : 'פתיחת עמדה — אין שומרים לפניכם') + (r.activity ? `\nפעילות: ${r.activity}` : '')
+  };
+}
+async function showNotice({ title, body }, tag) {
+  toast(title + ' · ' + body.split('\n')[0], 8000);
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const opts = { body, tag, renotify: true, requireInteraction: true, vibrate: [300, 120, 300], icon: 'icon.svg', badge: 'icon.svg', data: { url: location.href.split('#')[0] + '#now' } };
+  try {
+    const reg = 'serviceWorker' in navigator && await navigator.serviceWorker.getRegistration();
+    if (reg) return reg.showNotification(title, opts);
+    new Notification(title, opts);
+  } catch (e) { console.warn(e); }
+}
+function checkNotify() {
+  const mode = S.settings.notify;
+  if (!mode || S.sim != null) return;
+  const t = nowAbs(), me = currentMe();
+  const sent = LS.get('notified', []);
+  const due = S.rows.filter(r => r.startMin > t && r.startMin - t <= NOTIFY_MIN && r.name && (mode === 'all' || r.name === me));
+  const seen = new Set();
+  due.forEach(r => {
+    const key = `${r.startMin}|${r.base}|${mode === 'all' ? '' : r.name}`;
+    if (seen.has(key) || sent.includes(key)) return;
+    seen.add(key); sent.push(key);
+    showNotice(shiftAlert(r), 'shift-' + r.startMin + '-' + r.base);
+  });
+  if (seen.size) LS.set('notified', sent.slice(-300));
+}
+async function setNotify(mode) {
+  if (mode && 'Notification' in window && Notification.permission !== 'granted') {
+    const p = await Notification.requestPermission();
+    if (p !== 'granted') toast('ההתראות חסומות בדפדפן — יוצגו רק כשהאתר פתוח. אפשר לאשר בהגדרות האתר בדפדפן.', 6000);
+  } else if (mode && !('Notification' in window)) {
+    toast(/iPhone|iPad/.test(navigator.userAgent) ? 'באייפון: שיתוף ← "הוספה למסך הבית", ואז להפעיל משם' : 'הדפדפן לא תומך בהתראות', 6000);
+  }
+  S.settings.notify = mode; LS.set('settings', S.settings);
+  renderNotifyUI();
+  if (mode) toast(mode === 'all' ? '🔔 התראה 5 דק׳ לפני כל משמרת' : '🔔 התראה 5 דק׳ לפני המשמרות של ' + (currentMe() || '— בחרו שם'));
+}
+function renderNotifyUI() {
+  $('#notifyMode').value = S.settings.notify || '';
+  const blocked = 'Notification' in window && Notification.permission === 'denied';
+  $('#notifyHint').textContent = !S.settings.notify ? '' : blocked ? '⚠️ ההתראות חסומות בדפדפן — תופיע רק הודעה בתוך האתר'
+    : 'ההתראה מגיעה כשהאתר פתוח (גם ברקע). ליתר ביטחון — ייצוא ליומן כולל תזכורת 5 דק׳.';
+}
+
 /* ---------- ייצוא ליומן (ICS) ---------- */
 function downloadICS(name, rows) {
   const base = campStartDate();
@@ -552,8 +607,8 @@ function downloadICS(name, rows) {
     lines.push('BEGIN:VEVENT', `UID:shmirot-${r.id}-${encodeURIComponent(name).replace(/%/g, '')}@shmirot`,
       'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z', 'DTSTART:' + dt(r.startMin), 'DTEND:' + dt(r.endMin),
       'SUMMARY:' + escI(`🛡 שמירה · ${r.post}`),
-      'DESCRIPTION:' + escI(`${r.day} ${r.from}–${r.to}\n${r.partners.length ? 'עם ' + r.partners.map(p => p.name).join(', ') + '\n' : ''}${r.activity || ''}`),
-      'BEGIN:VALARM', 'TRIGGER:-PT15M', 'ACTION:DISPLAY', 'DESCRIPTION:' + escI('שמירה בעוד 15 דקות'), 'END:VALARM', 'END:VEVENT');
+      'DESCRIPTION:' + escI(`${r.day} ${r.from}–${r.to}\n${r.partners.length ? 'עם ' + r.partners.map(p => p.name).join(', ') + '\n' : ''}${outgoing(r).length ? 'מחליפים את: ' + outgoing(r).map(x => x.name).join(', ') + '\n' : ''}${r.activity || ''}`),
+      'BEGIN:VALARM', `TRIGGER:-PT${NOTIFY_MIN}M`, 'ACTION:DISPLAY', 'DESCRIPTION:' + escI(shiftAlert(r).title + '\n' + shiftAlert(r).body), 'END:VALARM', 'END:VEVENT');
   });
   lines.push('END:VCALENDAR');
   const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
@@ -948,6 +1003,14 @@ function bind() {
   // המשמרות שלי
   $('#mineName').addEventListener('input', () => { if (S.soldiers.has(currentMe()) || !currentMe()) onMineChange(); });
   $('#mineName').addEventListener('change', () => { if (findNames($('#mineName').value).length === 1) $('#mineName').value = currentMe(); onMineChange(); });
+  $('#notifyMode').onchange = () => setNotify($('#notifyMode').value);
+  $('#notifyTest').onclick = async () => {
+    if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
+    const t = nowAbs(), me = currentMe();
+    const r = S.rows.find(x => x.startMin > t && x.name && (!me || x.name === me)) || S.rows.find(x => x.name);
+    if (r) showNotice(shiftAlert(r), 'test');
+    renderNotifyUI();
+  };
   $('#rememberMe').onchange = () => { if (!$('#rememberMe').checked) LS.del('me'); else onMineChange(); };
 
   // לוח
@@ -1001,7 +1064,7 @@ function bind() {
   $('#setSave').onclick = e => {
     e.preventDefault();
     const scriptChanged = $('#setScript').value.trim() !== S.settings.script;
-    S.settings = { start: $('#setStart').value, script: $('#setScript').value.trim(), by: $('#setBy').value.trim(), auto: $('#setAuto').checked };
+    S.settings = { ...S.settings, start: $('#setStart').value, script: $('#setScript').value.trim(), by: $('#setBy').value.trim(), auto: $('#setAuto').checked };
     LS.set('settings', S.settings);
     $('#settingsModal').close();
     toast('ההגדרות נשמרו');
@@ -1041,7 +1104,9 @@ function refreshTimeViews() {
   syncSimInputs();
   tickClock();
   loadData();
-  setInterval(() => { tickClock(); if (S.sim == null && $('#simTime') !== document.activeElement) syncSimInputs(); }, 1000);
+  renderNotifyUI();
+  if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(e => console.warn(e));
+  setInterval(() => { checkNotify(); tickClock(); if (S.sim == null && $('#simTime') !== document.activeElement) syncSimInputs(); }, 1000);
   setInterval(() => { if (S.settings.auto && document.visibilityState === 'visible') loadData(); }, 120000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.settings.auto && Date.now() - (S.base.at || 0) > 60000) loadData(); });
 })();
