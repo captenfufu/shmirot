@@ -468,3 +468,7 @@ html[data-theme="light"] .team-card h4 { color: color-mix(in srgb, var(--tc) 75%
   .board .chip { background: none !important; border-inline-start-width: 3px; padding: 1px 3px; }
   .board tr.now-row td { background: none; }
 }
+
+/* בחירת שם כשיש כמה התאמות לשם פרטי */
+.name-choices { margin: 8px 0 0; align-items: center; grid-column: 1 / -1; }
+.hero .name-choices { justify-content: center; }

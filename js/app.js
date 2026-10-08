@@ -271,6 +271,34 @@ function renderChecks(list) {
   if (!list.length) return '<div class="check-item ok">✓ אין התנגשויות — ההחלפה תקינה</div>';
   return list.map(c => `<div class="check-item ${c.lvl}">${c.lvl === 'err' ? '⛔' : '⚠️'} ${esc(c.msg)}</div>`).join('');
 }
+/* ---------- זיהוי שם לפי שם פרטי / חלק מהשם ---------- */
+const normName = s => String(s || '').trim().replace(/\s+/g, ' ').replace(/[׳']/g, "'").replace(/[״"]/g, '"');
+// כל החיילים שמתאימים לטקסט: שם מלא מדויק, או שכל מילה שהוקלדה היא תחילת מילה בשם (״גלעד״, ״גלעד ש״, ״שלמון״)
+function findNames(q) {
+  q = normName(q);
+  if (!q) return [];
+  const all = [...S.soldiers.keys()];
+  const exact = all.find(n => normName(n) === q);
+  if (exact) return [exact];
+  const toks = q.split(' ');
+  return all.filter(n => { const w = normName(n).split(' '); return toks.every(t => w.some(x => x.startsWith(t))); })
+    .sort((a, b) => a.localeCompare(b, 'he'));
+}
+// שם מלא אם יש התאמה יחידה, אחרת הטקסט כפי שהוקלד
+function resolveName(q) { const m = findNames(q); return m.length === 1 ? m[0] : String(q || '').trim(); }
+// שדה שם: בהתאמה יחידה — משלים לשם המלא; בכמה התאמות — מציג כפתורי בחירה מתחת לשדה
+function nameChoices(input, onPick) {
+  const host = input.closest('label, .hero-search, .replace-row') || input;
+  let box = host.nextElementSibling && host.nextElementSibling.classList.contains('name-choices') ? host.nextElementSibling : null;
+  const m = findNames(input.value);
+  if (m.length === 1 && input.value.trim() !== m[0]) input.value = m[0];
+  if (m.length < 2) { if (box) box.remove(); return m.length === 1; }
+  if (!box) { box = document.createElement('div'); box.className = 'name-choices suggest-list'; host.after(box); }
+  box.innerHTML = `<span class="muted small">למי התכוונת?</span>` + m.slice(0, 12).map(n => `<button type="button" data-choice="${esc(n)}"><span class="badge ${teamCls((S.soldiers.get(n) || {}).team)}">${teamNum((S.soldiers.get(n) || {}).team)}</span>${esc(n)}</button>`).join('') + (m.length > 12 ? `<span class="muted small">ועוד ${m.length - 12}…</span>` : '');
+  box.onclick = e => { const b = e.target.closest('[data-choice]'); if (!b) return; input.value = b.dataset.choice; box.remove(); onPick(); };
+  return false;
+}
+
 function soldierHours(name) { return S.rows.filter(r => r.name === name).reduce((a, r) => a + r.hours, 0); }
 
 // מועמדים להחליף במשמרת — בלי התנגשות, מאותו צוות של בן הזוג, עם הכי מעט שעות
@@ -439,14 +467,20 @@ function tickClock() {
 }
 
 /* ---------- המשמרות שלי ---------- */
-function currentMe() { return $('#mineName').value.trim(); }
+function currentMe() { return resolveName($('#mineName').value); }
 function renderMine() {
   const name = currentMe();
   const body = $('#mineBody');
   if (!name) { body.innerHTML = '<p class="empty">בחרו שם כדי לראות את כל המשמרות, ספירה לאחור למשמרת הבאה, וייצוא ליומן.</p>'; return; }
   const sol = S.soldiers.get(name);
   const mine = S.rows.filter(r => r.name === name);
-  if (!sol && !mine.length) { body.innerHTML = `<p class="empty">לא נמצא חייל בשם ״${esc(name)}״.</p>`; return; }
+  if (!sol && !mine.length) {
+    const m = findNames(name);
+    body.innerHTML = m.length > 1
+      ? `<p class="empty">נמצאו ${m.length} חיילים בשם ״${esc(name)}״ — בחרו:</p><div class="suggest-list" style="justify-content:center">${m.map(n => `<button data-person="${esc(n)}"><span class="badge ${teamCls(S.soldiers.get(n).team)}">${teamNum(S.soldiers.get(n).team)}</span>${esc(n)}</button>`).join('')}</div>`
+      : `<p class="empty">לא נמצא חייל בשם ״${esc(name)}״.</p>`;
+    return;
+  }
   const t = nowAbs();
   const hours = mine.reduce((a, r) => a + r.hours, 0);
   const night = mine.filter(r => r.night).reduce((a, r) => a + r.hours, 0);
@@ -541,7 +575,7 @@ function renderBoard() {
   const rows = S.rows.filter(r => r.day === S.boardDay);
   const posts = S.posts.filter(p => S.rows.some(r => r.post === p));
   const slots = [...new Set(rows.map(r => r.startMin))].sort((a, b) => a - b);
-  const hl = $('#boardHighlight').value.trim();
+  const hl = $('#boardHighlight').value.trim(), hlSet = new Set(findNames(hl));
   const tf = $('#boardTeam').value;
   const head = `<thead><tr><th>שעה</th>${posts.map(p => `<th>${esc(p)}</th>`).join('')}<th>לו״ז הצוותים</th></tr></thead>`;
   const body = slots.map(st => {
@@ -555,7 +589,7 @@ function renderBoard() {
       ${posts.map(p => {
         const r = rs.find(x => x.post === p);
         if (!r) return '<td class="cell empty-cell"></td>';
-        const cls = [teamCls(r.team), 'chip', r.changed ? 'changed' : '', hl && r.name === hl ? 'hl' : '', (hl && r.name !== hl) || (tf && r.team !== tf) ? 'dim' : ''].join(' ');
+        const cls = [teamCls(r.team), 'chip', r.changed ? 'changed' : '', hl && hlSet.has(r.name) ? 'hl' : '', (hl && !hlSet.has(r.name)) || (tf && r.team !== tf) ? 'dim' : ''].join(' ');
         return `<td class="cell"><button class="${cls}" data-shift="${r.id}" title="${esc(r.team + ' · ' + (r.activity || ''))}">${esc(r.name || '—')}</button></td>`;
       }).join('')}
       <td class="act">${esc(act)}</td></tr>`;
@@ -638,7 +672,7 @@ function shiftOptions(name, selected, includePast) {
   return '<option value="">— בחירת משמרת —</option>' + rows.map(r => `<option value="${r.id}" ${String(r.id) === String(selected) ? 'selected' : ''}>${r.day} ${r.from}–${r.to} · ${esc(r.post)}</option>`).join('');
 }
 function renderSwapForm() {
-  const a = $('#swA').value.trim(), b = $('#swB').value.trim();
+  const a = resolveName($('#swA').value), b = resolveName($('#swB').value);
   const aSel = $('#swAShift').value, bSel = $('#swBShift').value;
   $('#swAShift').innerHTML = a ? shiftOptions(a, aSel) : '<option value="">— קודם בוחרים שם —</option>';
   $('#swBShift').innerHTML = b ? shiftOptions(b, bSel) : '<option value="">— קודם בוחרים שם —</option>';
@@ -647,7 +681,7 @@ function renderSwapForm() {
   evalSwap();
 }
 function swapPlan() {
-  const a = $('#swA').value.trim(), b = $('#swB').value.trim();
+  const a = resolveName($('#swA').value), b = resolveName($('#swB').value);
   const s1 = S.rows.find(r => String(r.id) === $('#swAShift').value);
   const s2 = S.swapMode === 'swap' ? S.rows.find(r => String(r.id) === $('#swBShift').value) : null;
   return { a, b, s1, s2 };
@@ -819,15 +853,16 @@ function openShift(id) {
   const inp = $('#mReplace');
   if (inp) {
     const upd = () => {
-      const n = inp.value.trim();
+      const n = resolveName(inp.value);
       const chk = n ? (n === r.name ? [{ lvl: 'err', msg: 'זה כבר השומר/ת במשמרת' }] : checkAssign(n, r)) : [];
       $('#mChecks').innerHTML = n ? renderChecks(chk) : '';
       $('#mApply').disabled = !n || chk.some(x => x.lvl === 'err');
     };
     inp.oninput = upd;
+    inp.onchange = () => { nameChoices(inp, upd); upd(); };
     $$('[data-mpick]').forEach(b => b.onclick = () => { inp.value = b.dataset.mpick; upd(); });
     $('#mApply').onclick = async () => {
-      const n = inp.value.trim();
+      const n = resolveName(inp.value);
       if ($$('#mChecks .check-item.warn').length && !confirm('יש אזהרות. לבצע בכל זאת?')) return;
       const ok = await applyChanges([{ id: r.id, from: r.name, to: n }], `${n} מחליף/ה את ${r.name}`);
       if (ok) dlg.close();
@@ -899,7 +934,7 @@ function bind() {
   $$('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
 
   // גיבור
-  const go = () => { const n = $('#heroName').value.trim(); if (n) showPerson(n); };
+  const go = () => { const n = $('#heroName').value.trim(); if (n && nameChoices($('#heroName'), go)) showPerson($('#heroName').value.trim()); else if (n && !findNames(n).length) showPerson(n); };
   $('#heroGo').onclick = go;
   $('#heroName').addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
   $('#heroName').addEventListener('change', go);
@@ -912,7 +947,7 @@ function bind() {
 
   // המשמרות שלי
   $('#mineName').addEventListener('input', () => { if (S.soldiers.has(currentMe()) || !currentMe()) onMineChange(); });
-  $('#mineName').addEventListener('change', () => onMineChange());
+  $('#mineName').addEventListener('change', () => { if (findNames($('#mineName').value).length === 1) $('#mineName').value = currentMe(); onMineChange(); });
   $('#rememberMe').onchange = () => { if (!$('#rememberMe').checked) LS.del('me'); else onMineChange(); };
 
   // לוח
@@ -937,7 +972,10 @@ function bind() {
 
   // החלפות
   $('#swapMode').addEventListener('click', e => { const b = e.target.closest('[data-mode]'); if (b) { S.swapMode = b.dataset.mode; renderSwapForm(); } });
-  ['#swA', '#swB'].forEach(s => { $(s).addEventListener('change', renderSwapForm); $(s).addEventListener('input', () => { if (S.soldiers.has($(s).value.trim()) || !$(s).value.trim()) renderSwapForm(); }); });
+  ['#swA', '#swB'].forEach(s => {
+    $(s).addEventListener('change', () => { nameChoices($(s), renderSwapForm); renderSwapForm(); });
+    $(s).addEventListener('input', () => { if (findNames($(s).value).length === 1 || !$(s).value.trim()) renderSwapForm(); });
+  });
   ['#swAShift', '#swBShift'].forEach(s => $(s).addEventListener('change', evalSwap));
   $('#swapApply').onclick = doSwap;
   $('#syncBtn').onclick = syncLocal;
