@@ -391,6 +391,12 @@ function fillStaticLists() {
   fillSel('#fDay', S.days); fillSel('#fTeam', S.teams); fillSel('#fPost', S.posts);
   fillSel('#fType', [...new Set(S.rows.map(r => r.type))]);
   fillSel('#boardTeam', S.teams); fillSel('#solTeam', S.teams);
+  if (!fillStaticLists.done && S.teams.length) { // צוות שמור / מהקישור (?team=3)
+    fillStaticLists.done = true;
+    const q = new URLSearchParams(location.search).get('team');
+    const want = q ? S.teams.find(t => teamNum(t) === q) : LS.get('boardTeam', '');
+    if (want && S.teams.includes(want)) $('#boardTeam').value = want;
+  }
   const sd = $('#simDay'), v = sd.value;
   sd.innerHTML = S.days.map((d, i) => `<option value="${C.DAYS.indexOf(d) >= 0 ? C.DAYS.indexOf(d) : i}">${d}</option>`).join('');
   if (v) sd.value = v;
@@ -624,14 +630,22 @@ function renderBoard() {
     S.boardDay = S.days.includes(dayName(di)) ? dayName(di) : S.days[0];
   }
   const todayName = dayName(Math.floor(nowAbs() / 1440));
-  $('#dayTabs').innerHTML = S.days.map(d => `<button role="tab" data-day="${esc(d)}" class="${d === S.boardDay ? 'active' : ''}">${esc(d)}${d === todayName ? '<span class="today-dot" title="היום"></span>' : ''}</button>`).join('');
-  $('#board h2').dataset.print = ' — יום ' + S.boardDay;
+  const tf = $('#boardTeam').value;
+  // צוות נבחר: רק המשמרות של הצוות (משובצות לצוות, או ששומר/ת מהצוות עושה)
+  const ofTeam = r => !tf || r.team === tf || ((S.soldiers.get(r.name) || {}).team === tf);
+  const teamRows = S.rows.filter(ofTeam);
+  $('#dayTabs').innerHTML = S.days.map(d => { const n = tf ? teamRows.filter(r => r.day === d).length : 0;
+    return `<button role="tab" data-day="${esc(d)}" class="${d === S.boardDay ? 'active' : ''}">${esc(d)}${tf ? ` <small>(${n})</small>` : ''}${d === todayName ? '<span class="today-dot" title="היום"></span>' : ''}</button>`; }).join('');
+  $('#board h2').dataset.print = (tf ? ' — ' + tf : '') + ' — יום ' + S.boardDay;
 
-  const rows = S.rows.filter(r => r.day === S.boardDay);
-  const posts = S.posts.filter(p => S.rows.some(r => r.post === p));
+  const rows = teamRows.filter(r => r.day === S.boardDay);
+  if (tf && !rows.length) {
+    $('#boardTable').innerHTML = `<tbody><tr><td class="empty">ל${esc(tf)} אין משמרות ביום ${esc(S.boardDay)}.</td></tr></tbody>`;
+    return;
+  }
+  const posts = S.posts.filter(p => (tf ? rows : S.rows).some(r => r.post === p));
   const slots = [...new Set(rows.map(r => r.startMin))].sort((a, b) => a - b);
   const hl = $('#boardHighlight').value.trim(), hlSet = new Set(findNames(hl));
-  const tf = $('#boardTeam').value;
   const head = `<thead><tr><th>שעה</th>${posts.map(p => `<th>${esc(p)}</th>`).join('')}<th>לו״ז הצוותים</th></tr></thead>`;
   const body = slots.map(st => {
     const rs = rows.filter(r => r.startMin === st);
@@ -644,7 +658,7 @@ function renderBoard() {
       ${posts.map(p => {
         const r = rs.find(x => x.post === p);
         if (!r) return '<td class="cell empty-cell"></td>';
-        const cls = [teamCls(r.team), 'chip', r.changed ? 'changed' : '', hl && hlSet.has(r.name) ? 'hl' : '', (hl && !hlSet.has(r.name)) || (tf && r.team !== tf) ? 'dim' : ''].join(' ');
+        const cls = [teamCls(r.team), 'chip', r.changed ? 'changed' : '', hl && hlSet.has(r.name) ? 'hl' : '', (hl && !hlSet.has(r.name)) ? 'dim' : ''].join(' ');
         return `<td class="cell"><button class="${cls}" data-shift="${r.id}" title="${esc(r.team + ' · ' + (r.activity || ''))}">${esc(r.name || '—')}</button></td>`;
       }).join('')}
       <td class="act">${esc(act)}</td></tr>`;
@@ -1016,7 +1030,13 @@ function bind() {
   // לוח
   $('#dayTabs').addEventListener('click', e => { const b = e.target.closest('[data-day]'); if (b) { S.boardDay = b.dataset.day; renderBoard(); } });
   $('#boardHighlight').addEventListener('input', renderBoard);
-  $('#boardTeam').onchange = renderBoard;
+  $('#boardTeam').onchange = () => {
+    LS.set('boardTeam', $('#boardTeam').value);
+    const u = new URL(location.href);
+    if ($('#boardTeam').value) u.searchParams.set('team', teamNum($('#boardTeam').value)); else u.searchParams.delete('team');
+    history.replaceState(null, '', u);
+    renderBoard();
+  };
   $('#printBtn').onclick = () => window.print();
 
   // חיפוש
