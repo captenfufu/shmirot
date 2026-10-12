@@ -2,7 +2,7 @@
  * שמירות — Apps Script לסנכרון החלפות מהאתר לגיליון
  * ------------------------------------------------------------------
  * התקנה (פעם אחת, ע"י בעל הגיליון):
- *  1. בגיליון: הרחבות ← Apps Script. מחקו את התוכן והדביקו את הקובץ הזה.
+ *  1. בגיליון: הרחבות ← Apps Script (או מהטלפון: script.google.com ← פרויקט חדש). מחקו את התוכן והדביקו את הקובץ הזה.
  *  2. (רשות) הגדרות הפרויקט ← מאפייני סקריפט: הוסיפו SWAP_PIN עם קוד סודי.
  *     אם מוגדר — האתר יבקש את הקוד לפני כל החלפה.
  *  3. פריסה ← פריסה חדשה ← סוג: אפליקציית אינטרנט.
@@ -18,6 +18,12 @@ var LIST_SHEET = 'רשימת שמירות';
 var SOLDIERS_SHEET = 'חיילים';
 var LOG_SHEET = 'יומן החלפות';
 var NAME_HEADER = 'שם השומר';
+// מזהה הגיליון — מאפשר להריץ את הסקריפט גם כפרויקט נפרד (script.google.com) ולא רק מתוך הגיליון
+var SHEET_ID = '1XwWT4x-oVi2tuHDzZuwbpHtVcYEqiKx-6Sb29949h5k';
+
+function sheet_() {
+  return SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(SHEET_ID);
+}
 
 function doGet(e) {
   return json_(readData_());
@@ -36,7 +42,7 @@ function doPost(e) {
   var lock = LockService.getDocumentLock();
   lock.waitLock(15000);
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = sheet_();
     var sh = ss.getSheetByName(LIST_SHEET);
     var values = sh.getDataRange().getDisplayValues();
     var header = values[0];
@@ -75,7 +81,7 @@ function doPost(e) {
 }
 
 function readData_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = sheet_();
   return {
     ok: true,
     list: ss.getSheetByName(LIST_SHEET).getDataRange().getDisplayValues(),
