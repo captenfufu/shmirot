@@ -57,6 +57,8 @@ const S = {
   sort: { search: { key: 't', dir: 1 }, sol: { key: 'team', dir: 1 } },
   swapMode: 'swap'
 };
+// כתובת הסקריפט מ-config.js תקפה גם במכשירים ששמרו בעבר הגדרות עם כתובת ריקה
+if (!S.settings.script) S.settings.script = C.APPS_SCRIPT_URL || '';
 
 /* =======================================================================
    2. טעינת נתונים
@@ -151,6 +153,11 @@ async function loadData(manual) {
     if (manual) toast('לא הצלחנו להתחבר לגיליון');
   }
   rebuild();
+  // שינויים שנשמרו מקומית לפני החיבור לסקריפט — מסונכרנים אוטומטית (פעם אחת בכל טעינה)
+  if (S.base.source === 'script' && !loadData.synced && S.changes.some(c => c.state === 'local')) {
+    loadData.synced = true;
+    syncLocal();
+  }
 }
 
 function setStatus(kind, text) {
@@ -1080,6 +1087,17 @@ function bind() {
     $('#setStart').value = S.settings.start || `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     $('#setScript').value = S.settings.script; $('#setBy').value = S.settings.by; $('#setAuto').checked = S.settings.auto;
     $('#settingsModal').showModal();
+  };
+  $('#setTest').onclick = async () => {
+    const url = $('#setScript').value.trim(), out = $('#setTestOut');
+    if (!url) { out.textContent = 'הדביקו קודם את כתובת ה-/exec'; return; }
+    out.textContent = 'בודק…';
+    try {
+      const j = await (await fetch(url + (url.includes('?') ? '&' : '?') + 'action=data', { cache: 'no-store' })).json();
+      out.textContent = j.ok ? `✅ מחובר — נמצאו ${j.list.length - 1} משמרות. לחצו "שמירה".` : '❌ ' + (j.error || 'שגיאה');
+    } catch (e) {
+      out.textContent = '❌ אין תשובה. ודאו שהפריסה היא "אפליקציית אינטרנט" עם גישה ל"כל אחד", ושהכתובת מסתיימת ב-/exec';
+    }
   };
   $('#setSave').onclick = e => {
     e.preventDefault();
