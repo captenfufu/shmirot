@@ -89,11 +89,13 @@ function tableToRows(table) {
     activity: col('פעילות הצוות באותו זמן', 9), note: col('הערה', 10)
   };
   const out = [];
+  const colLetter = n => (n >= 26 ? String.fromCharCode(64 + Math.floor(n / 26)) : '') + String.fromCharCode(65 + n % 26);
+  const sheetCol = colLetter(I.name);
   table.slice(1).forEach((r, i) => {
     const g = k => String(r[I[k]] ?? '').trim();
     if (!g('day') || !g('from')) return;
     out.push({
-      id: Number(g('id')) || out.length + 1, sheetRow: i + 2,
+      id: Number(g('id')) || out.length + 1, sheetRow: i + 2, sheetCol,
       day: g('day'), from: normTime(g('from')), to: normTime(g('to')), hours: Number(g('hours')) || 0,
       type: g('type'), team: g('team'), post: g('post'), name: g('name'),
       activity: g('activity'), note: g('note')
@@ -331,7 +333,7 @@ async function applyChanges(changes, label) {
   const stamp = Date.now();
   const recs = changes.map(c => {
     const r = S.byId.get(c.id) || S.rows.find(x => x.id === c.id);
-    return { id: c.id, from: c.from, to: c.to, at: stamp, label, desc: `${r.day} ${r.from}–${r.to} · ${r.post}`, sheetRow: r.sheetRow, status: 'local' };
+    return { id: c.id, from: c.from, to: c.to, at: stamp, label, desc: `${r.day} ${r.from}–${r.to} · ${r.post}`, sheetRow: r.sheetRow, sheetCol: r.sheetCol || 'I', status: 'local' };
   });
 
   if (script) {
@@ -369,7 +371,7 @@ async function applyChanges(changes, label) {
   }
   S.changes.push(...recs); saveChanges();
   rebuild();
-  if (!script) toast('נשמר אצלך. כדי שכולם יראו — עדכנו בגיליון (קישור ברשימת השינויים)', 5000);
+  if (!script) openSheetCells(recs);
   return true;
 }
 function saveChanges() { LS.set('changes', S.changes.map(({ state, ...c }) => c)); }
@@ -813,10 +815,26 @@ function renderChanges() {
       <div><b>${esc(c.from)}</b> → <b>${esc(c.to)}</b> ${stateTag(c)}
         <div class="meta">${esc(c.desc)} · ${new Date(c.at).toLocaleString('he-IL', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</div></div>
       <div class="row-btns" style="margin:0">
-        ${c.state === 'local' && c.sheetRow ? `<a class="btn small ghost-dark" target="_blank" rel="noopener" href="${sheetUrl(C.LIST_GID, 'I' + c.sheetRow)}" title="פתיחת התא בגיליון">✎ עדכון בגיליון</a>` : ''}
+        ${c.state === 'local' && c.sheetRow ? `<button class="btn small ghost-dark" data-cells="${c.at}-${c.id}" title="פתיחת התא בגיליון">✎ עדכון בגיליון</button>` : ''}
         ${c.status !== 'synced' ? `<button class="btn small ghost-dark danger" data-undo="${c.at}-${c.id}" title="ביטול">✕</button>` : ''}
       </div></li>`).join('') || '<li class="muted" style="grid-template-columns:1fr">עדיין אין שינויים.</li>';
   $('#syncBtn').hidden = !(script && S.changes.some(c => c.state === 'local'));
+}
+// חלון "עדכון בגיליון": לכל שינוי — כתובת התא, מה לכתוב, פתיחה ישירה של התא והעתקת השם
+function openSheetCells(recs) {
+  recs = recs.filter(c => c.sheetRow);
+  if (!recs.length) return;
+  $('#cellsBody').innerHTML = recs.map(c => {
+    const cell = (c.sheetCol || 'I') + c.sheetRow;
+    return `<div class="cell-item">
+      <div><span class="cell-addr">${cell}</span> <span class="muted small">${esc(c.desc)}</span></div>
+      <div class="cell-change">במקום <s>${esc(c.from)}</s> כותבים: <b>${esc(c.to)}</b></div>
+      <div class="row-btns" style="margin:6px 0 0">
+        <a class="btn small" target="_blank" rel="noopener" href="${sheetUrl(C.LIST_GID, cell)}">📄 פתיחת תא ${cell}</a>
+        <button class="btn small ghost-dark" data-copyname="${esc(c.to)}">📋 העתקת השם</button>
+      </div></div>`;
+  }).join('');
+  $('#cellsModal').showModal();
 }
 async function syncLocal() {
   const local = S.changes.filter(c => c.state === 'local');
@@ -923,7 +941,7 @@ function openShift(id) {
     }</div></div>` : ''}
     <div class="row-btns">
       ${r.endMin > t ? `<button class="btn small ghost-dark" id="mSwapForm">🔁 החלפת משמרות (הדדית)</button>` : ''}
-      <a class="btn small ghost-dark" target="_blank" rel="noopener" href="${sheetUrl(C.LIST_GID, 'I' + (r.sheetRow || r.id + 1))}">📄 פתיחה בגיליון</a>
+      <a class="btn small ghost-dark" target="_blank" rel="noopener" href="${sheetUrl(C.LIST_GID, (r.sheetCol || 'I') + (r.sheetRow || r.id + 1))}">📄 פתיחה בגיליון</a>
     </div>`;
   const dlg = $('#shiftModal');
   const inp = $('#mReplace');
@@ -1002,6 +1020,8 @@ function bind() {
     const s = e.target.closest('[data-shift]'); if (s) { e.preventDefault(); openShift(s.dataset.shift); return; }
     const sw = e.target.closest('[data-swapfrom]'); if (sw) { prefillSwap(S.rows.find(r => String(r.id) === sw.dataset.swapfrom)); return; }
     const pk = e.target.closest('[data-pick]'); if (pk) { $('#swB').value = pk.dataset.pick; if (S.swapMode === 'swap') S.swapMode = 'cover'; renderSwapForm(); return; }
+    const ce = e.target.closest('[data-cells]'); if (ce) { openSheetCells(S.changes.filter(c => `${c.at}-${c.id}` === ce.dataset.cells)); return; }
+    const cp = e.target.closest('[data-copyname]'); if (cp) { copy(cp.dataset.copyname, `הועתק: ${cp.dataset.copyname} — הדביקו בתא`); return; }
     const un = e.target.closest('[data-undo]'); if (un) {
       S.changes = S.changes.filter(c => `${c.at}-${c.id}` !== un.dataset.undo); saveChanges(); rebuild(); toast('השינוי בוטל'); return;
     }
@@ -1069,6 +1089,7 @@ function bind() {
   ['#swAShift', '#swBShift'].forEach(s => $(s).addEventListener('change', evalSwap));
   $('#swapApply').onclick = doSwap;
   $('#syncBtn').onclick = syncLocal;
+  $('#allCells').onclick = () => { const l = S.changes.filter(c => c.state === 'local'); if (!l.length) return toast('אין שינויים שממתינים לעדכון בגיליון'); openSheetCells(l); };
   $('#shareChanges').onclick = () => { const t = changesText(); if (!t) return toast('אין שינויים לשיתוף'); shareText(t); };
   $('#clearChanges').onclick = () => {
     if (!S.changes.some(c => c.status !== 'synced')) return toast('אין שינויים מקומיים');

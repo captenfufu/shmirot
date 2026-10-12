@@ -203,6 +203,7 @@
         <ul class="changes" id="changesList"></ul>
         <div class="row-btns">
           <button class="btn small" id="syncBtn" hidden>⬆ סנכרון לגיליון</button>
+          <button class="btn small ghost-dark" id="allCells">✎ כל התאים לעדכון</button>
           <button class="btn small ghost-dark" id="shareChanges">📤 שיתוף בוואטסאפ</button>
           <button class="btn small ghost-dark danger" id="clearChanges">ביטול כל השינויים המקומיים</button>
         </div>
@@ -262,6 +263,15 @@
 <dialog id="shiftModal" class="modal">
   <form method="dialog" class="modal-close-form"><button class="modal-x" aria-label="סגירה">✕</button></form>
   <div id="shiftModalBody"></div>
+</dialog>
+
+<!-- ============ SHEET CELLS MODAL ============ -->
+<dialog id="cellsModal" class="modal">
+  <form method="dialog" class="modal-close-form"><button class="modal-x" aria-label="סגירה">✕</button></form>
+  <h3>✎ עדכון בגיליון החי</h3>
+  <p class="muted small">ההחלפה נשמרה אצלך. כדי שכולם יראו — פתחו כל תא, כתבו בו את השם החדש (אפשר להעתיק ולהדביק), וזהו. אחרי רענון השינוי יסומן "מעודכן בגיליון".</p>
+  <div id="cellsBody"></div>
+  <p class="muted small">💡 אם בטלפון הגיליון נפתח בלי לקפוץ לתא — גללו לשורה לפי המספר (למשל I37 = שורה 37, עמודת "שם השומר").</p>
 </dialog>
 
 <!-- ============ SETTINGS MODAL ============ -->
